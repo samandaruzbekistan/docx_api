@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOCX Fayl Yuklash</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        input[type="file"]:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+            padding-right: 40px;
+        }
+
+        select:hover {
+            border-color: #667eea;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        select:disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        input[type="file"]:disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            display: block;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            display: block;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .file-name {
+            margin-top: 8px;
+            color: #667eea;
+            font-size: 13px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 DOCX Fayl Yuklash</h1>
+        <p class="subtitle">Test, til, sinf, fan va fayl tanlang</p>
+        
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="testSelect">Test tanlash:</label>
+                <select id="testSelect" name="test" required>
+                    <option value="">Yuklanmoqda...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="languageSelect">Til:</label>
+                <select id="languageSelect" name="language" required disabled>
+                    <option value="">Avval testni tanlang</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="classSelect">Sinf darajasi:</label>
+                <select id="classSelect" name="class" required disabled>
+                    <option value="">Avval tilni tanlang</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="subjectSelect">Fan:</label>
+                <select id="subjectSelect" name="subject" required disabled>
+                    <option value="">Avval sinfni tanlang</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="fileInput">Fayl tanlash:</label>
+                <input type="file" id="fileInput" name="file" accept=".docx" required disabled>
+                <div class="file-name" id="fileName"></div>
+            </div>
+
+            <button type="submit" class="btn-submit" id="submitBtn">Yuborish</button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #666;">Fayl yuklanmoqda...</p>
+        </div>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const form = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const testSelect = document.getElementById('testSelect');
+        const languageSelect = document.getElementById('languageSelect');
+        const classSelect = document.getElementById('classSelect');
+        const subjectSelect = document.getElementById('subjectSelect');
+        
+        let currentTestData = null;
+        let selectedLanguage = null;
+
+        // Sahifa yuklanganda testlarni yuklash
+        async function loadTests() {
+            try {
+                const response = await fetch('/api/tests');
+                const data = await response.json();
+
+                if (data.success && data.tests && data.tests.length > 0) {
+                    testSelect.innerHTML = '<option value="">Tanlang...</option>';
+                    data.tests.forEach(test => {
+                        const option = document.createElement('option');
+                        option.value = test.id;
+                        option.textContent = test.name;
+                        testSelect.appendChild(option);
+                    });
+                } else {
+                    showResult('Testlar yuklanmadi: ' + (data.error || 'Noma\'lum xatolik'), 'error');
+                }
+            } catch (error) {
+                console.error('Testlarni yuklashda xatolik:', error);
+                showResult('Testlarni yuklashda xatolik.', 'error');
+            }
+        }
+
+        // Test tanlanganda, mavjud tillarni yuklash
+        async function loadTestData(testId) {
+            try {
+                const response = await fetch(`/api/test-data/${testId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    currentTestData = data;
+                    
+                    // Mavjud tillarni aniqlash (subjects dan)
+                    const languages = new Set();
+                    if (data.subjects && data.subjects.length > 0) {
+                        data.subjects.forEach(subject => {
+                            if (subject.language) {
+                                languages.add(subject.language);
+                            }
+                        });
+                    }
+                    
+                    // Til dropdown ni to'ldirish
+                    languageSelect.innerHTML = '<option value="">Tanlang...</option>';
+                    languageSelect.disabled = false;
+                    
+                    const languageNames = {
+                        'uz': 'Oʻzbek tili',
+                        'ru': 'Русский язык'
+                    };
+                    
+                    Array.from(languages).sort().forEach(lang => {
+                        const option = document.createElement('option');
+                        option.value = lang;
+                        option.textContent = languageNames[lang] || lang.toUpperCase();
+                        languageSelect.appendChild(option);
+                    });
+
+                    // Sinf va fan dropdown ni tozalaash
+                    classSelect.innerHTML = '<option value="">Avval tilni tanlang</option>';
+                    classSelect.disabled = true;
+                    subjectSelect.innerHTML = '<option value="">Avval sinfni tanlang</option>';
+                    subjectSelect.disabled = true;
+                    fileInput.disabled = true;
+                } else {
+                    showResult('Test ma\'lumotlari yuklanmadi: ' + (data.error || 'Noma\'lum xatolik'), 'error');
+                }
+            } catch (error) {
+                console.error('Test ma\'lumotlarini yuklashda xatolik:', error);
+                showResult('Test ma\'lumotlarini yuklashda xatolik.', 'error');
+            }
+        }
+
+        // Til tanlanganda, sinflarni yuklash
+        function loadGrades() {
+            if (!currentTestData || !currentTestData.grades) {
+                return;
+            }
+            
+            // Sinf darajalarini to'ldirish
+            classSelect.innerHTML = '<option value="">Tanlang...</option>';
+            classSelect.disabled = false;
+            if (currentTestData.grades.length > 0) {
+                currentTestData.grades.forEach(grade => {
+                    const option = document.createElement('option');
+                    option.value = grade.id;
+                    option.textContent = grade.name;
+                    option.setAttribute('data-level', grade.level);
+                    classSelect.appendChild(option);
+                });
+            }
+
+            // Fan dropdown ni tozalaash
+            subjectSelect.innerHTML = '<option value="">Avval sinfni tanlang</option>';
+            subjectSelect.disabled = true;
+            fileInput.disabled = true;
+        }
+
+        // Sinf tanlanganda, fanlarni yuklash
+        function loadSubjects(gradeId) {
+            if (!currentTestData || !currentTestData.subjects || !selectedLanguage) {
+                return;
+            }
+
+            // Tanlangan tilga mos fanlarni filtrlash
+            const filteredSubjects = currentTestData.subjects.filter(
+                subject => subject.language === selectedLanguage
+            );
+            
+            subjectSelect.innerHTML = '<option value="">Tanlang...</option>';
+            subjectSelect.disabled = false;
+            
+            if (filteredSubjects.length > 0) {
+                filteredSubjects.forEach(subject => {
+                    const option = document.createElement('option');
+                    option.value = subject.id;
+                    option.textContent = subject.name;
+                    subjectSelect.appendChild(option);
+                });
+            } else {
+                subjectSelect.innerHTML = '<option value="">Fanlar topilmadi</option>';
+            }
+        }
+
+        // Fan tanlanganda, fayl tanlash aktiv bo'ladi
+        subjectSelect.addEventListener('change', function() {
+            if (this.value) {
+                fileInput.disabled = false;
+            } else {
+                fileInput.disabled = true;
+            }
+        });
+
+        // Test tanlash o'zgarganda
+        testSelect.addEventListener('change', async function() {
+            const testId = this.value;
+            if (testId) {
+                await loadTestData(testId);
+            } else {
+                // Reset qilish
+                languageSelect.innerHTML = '<option value="">Avval testni tanlang</option>';
+                languageSelect.disabled = true;
+                classSelect.innerHTML = '<option value="">Avval tilni tanlang</option>';
+                classSelect.disabled = true;
+                subjectSelect.innerHTML = '<option value="">Avval sinfni tanlang</option>';
+                subjectSelect.disabled = true;
+                fileInput.disabled = true;
+                currentTestData = null;
+                selectedLanguage = null;
+            }
+        });
+
+        // Til tanlash o'zgarganda
+        languageSelect.addEventListener('change', function() {
+            const lang = this.value;
+            if (lang) {
+                selectedLanguage = lang;
+                loadGrades();
+            } else {
+                selectedLanguage = null;
+                classSelect.innerHTML = '<option value="">Avval tilni tanlang</option>';
+                classSelect.disabled = true;
+                subjectSelect.innerHTML = '<option value="">Avval sinfni tanlang</option>';
+                subjectSelect.disabled = true;
+                fileInput.disabled = true;
+            }
+        });
+
+        // Sinf tanlash o'zgarganda
+        classSelect.addEventListener('change', function() {
+            const gradeId = this.value;
+            if (gradeId) {
+                loadSubjects(gradeId);
+            } else {
+                subjectSelect.innerHTML = '<option value="">Avval sinfni tanlang</option>';
+                subjectSelect.disabled = true;
+                fileInput.disabled = true;
+            }
+        });
+
+        // Sahifa yuklanganda testlarni yuklash
+        loadTests();
+
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                fileName.textContent = '✓ ' + e.target.files[0].name;
+            } else {
+                fileName.textContent = '';
+            }
+        });
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const file = fileInput.files[0];
+            const testValue = document.getElementById('testSelect').value;
+            const languageValue = document.getElementById('languageSelect').value;
+            const classValue = document.getElementById('classSelect').value;
+            const subjectValue = document.getElementById('subjectSelect').value;
+
+            if (!file || !testValue || !languageValue || !classValue || !subjectValue) {
+                showResult('Iltimos, barcha maydonlarni to\'ldiring!', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('test', testValue);
+            formData.append('language', languageValue);
+            formData.append('class_id', classValue);
+            formData.append('subject', subjectValue);
+
+            submitBtn.disabled = true;
+            loading.classList.add('active');
+            result.className = 'result';
+            result.style.display = 'none';
+
+            try {
+                const response = await fetch('/parse-docx/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showResult(`Muvaffaqiyatli! ${data.count} ta savol yuborildi.`, 'success');
+                    console.log('Natija:', data);
+                } else {
+                    showResult(`Xatolik: ${data.error || data.message || 'Noma\'lum xatolik'}`, 'error');
+                }
+            } catch (error) {
+                showResult(`Xatolik: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                loading.classList.remove('active');
+            }
+        });
+
+        function showResult(message, type) {
+            result.textContent = message;
+            result.className = 'result ' + type;
+            result.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+
