@@ -210,13 +210,15 @@ def crop_image(img_bytes, crop_info):
 
 
 def extract_image_from_cell(cell, zip_content, image_index):
-    """Cell ichidagi birinchi rasmni base64 qilib olish. Crop qilingan bo'lsa, crop qiladi."""
+    """Cell ichidagi birinchi rasmni base64 qilib olish. a:blip yoki v:imagedata orqali."""
     try:
         found_image_ref = None
         run_element = None
         
         for paragraph in cell.paragraphs:
             for run in paragraph.runs:
+
+                # 1) a:blip orqali rasm izlash
                 blips = run._element.findall(
                     ".//a:blip",
                     {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"},
@@ -229,6 +231,22 @@ def extract_image_from_cell(cell, zip_content, image_index):
                         found_image_ref = embed_id
                         run_element = run._element
                         break
+
+                # 2) Agar blip topilmasa → v:imagedata orqali VML rasm qidirish
+                if not found_image_ref:
+                    v_imgs = run._element.findall(
+                        ".//v:imagedata",
+                        {"v": "urn:schemas-microsoft-com:vml"}
+                    )
+                    for vimg in v_imgs:
+                        embed_id = vimg.get(
+                            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+                        )
+                        if embed_id:
+                            found_image_ref = embed_id
+                            run_element = run._element
+                            break
+
                 if found_image_ref:
                     break
             if found_image_ref:
@@ -237,10 +255,10 @@ def extract_image_from_cell(cell, zip_content, image_index):
         if not found_image_ref:
             return None
 
-        # Crop ma'lumotlarini olish
+        # 3) Crop ma'lumotlari
         crop_info = extract_crop_info(run_element) if run_element else None
 
-        # Rasmni DOCX zip ichidan o'qish
+        # 4) DOCX ZIPdan rasmni chiqarish
         with zipfile.ZipFile(io.BytesIO(zip_content), "r") as zf:
             rels_xml = safe_read_zip(zf, "word/_rels/document.xml.rels")
             if not rels_xml:
@@ -255,46 +273,44 @@ def extract_image_from_cell(cell, zip_content, image_index):
             img_bytes = safe_read_zip(zf, media_file)
             if not img_bytes:
                 return None
-            
-            # Rasm hajmini tekshirish
-            if len(img_bytes) == 0:
-                print(f"⚠️ Rasm bo'sh: {media_file}")
-                return None
-            
-            # Crop qilish (agar crop ma'lumotlari bo'lsa)
+
+            # 5) WMF/EMF → PNG konvertatsiya (Word clipartlar uchun)
+            ext = os.path.splitext(media_file)[1].lower()
+            if ext in [".wmf", ".emf"]:
+                try:
+                    from PIL import Image
+                    img = Image.open(io.BytesIO(img_bytes))
+                    buffer = io.BytesIO()
+                    img.save(buffer, format="PNG")
+                    img_bytes = buffer.getvalue()
+                except:
+                    print("⚠ WMF/EMF konvert qilib bo'lmadi, o‘tkazib yuborildi.")
+                    return None
+
+            # 6) Crop qo‘llash
             if crop_info:
                 img_bytes = crop_image(img_bytes, crop_info)
-            
-            # Rasm type ni aniqlash (content type uchun)
-            mime_type = "image/png"  # default
-            # PNG signature ni tekshirish (89 50 4E 47)
+
+            # 7) MIME aniqlash
+            mime_type = "image/png"
             if img_bytes[:4] == b'\x89PNG':
                 mime_type = "image/png"
-            # JPEG signature ni tekshirish (FF D8 FF)
             elif img_bytes[:3] == b'\xFF\xD8\xFF':
                 mime_type = "image/jpeg"
             else:
-                # Kengaytma bo'yicha
-                file_ext = os.path.splitext(media_file)[1].lower()
-                if file_ext in [".jpg", ".jpeg", ".jfif"]:
+                if ext in [".jpg", ".jpeg"]:
                     mime_type = "image/jpeg"
-                elif file_ext == ".gif":
+                elif ext == ".gif":
                     mime_type = "image/gif"
-                else:
-                    mime_type = "image/png"
 
-            # Base64 ga o'tkazish
-            img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-            
-            # Data URL formatida qaytarish
+            # 8) Base64
+            img_base64 = base64.b64encode(img_bytes).decode()
+
             return f"data:{mime_type};base64,{img_base64}"
 
     except Exception as e:
         print(f"❗ Rasmni o'qishda xatolik: {e}")
-        import traceback
-        traceback.print_exc()
         return None
-
 
 def build_cell_data(cell, zip_content, image_index):
     """Cell uchun text/image obyektini tuzadi. 
