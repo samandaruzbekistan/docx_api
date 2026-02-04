@@ -231,8 +231,8 @@
             </div>
 
             <div class="form-group">
-                <label for="fileInput">Fayl tanlash:</label>
-                <input type="file" id="fileInput" name="file" accept=".docx" required disabled>
+                <label for="fileInput">Fayl tanlash (1 yoki bir nechta):</label>
+                <input type="file" id="fileInput" name="files" accept=".docx" required disabled multiple>
                 <div class="file-name" id="fileName"></div>
             </div>
 
@@ -447,7 +447,9 @@
 
         fileInput.addEventListener('change', function(e) {
             if (e.target.files.length > 0) {
-                fileName.textContent = '✓ ' + e.target.files[0].name;
+                const count = e.target.files.length;
+                const names = Array.from(e.target.files).slice(0, 3).map(f => f.name).join(', ');
+                fileName.textContent = '✓ ' + count + ' ta fayl: ' + names + (count > 3 ? '...' : '');
             } else {
                 fileName.textContent = '';
             }
@@ -456,19 +458,21 @@
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
-            const file = fileInput.files[0];
+            const files = fileInput.files;
             const testValue = document.getElementById('testSelect').value;
             const languageValue = document.getElementById('languageSelect').value;
             const classValue = document.getElementById('classSelect').value;
             const subjectValue = document.getElementById('subjectSelect').value;
 
-            if (!file || !testValue || !languageValue || !classValue || !subjectValue) {
-                showResult('Iltimos, barcha maydonlarni to\'ldiring!', 'error');
+            if (!files || files.length === 0 || !testValue || !languageValue || !classValue || !subjectValue) {
+                showResult('Iltimos, barcha maydonlarni to\'ldiring va kamida bitta fayl tanlang!', 'error');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('file', file);
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
             formData.append('test', testValue);
             formData.append('language', languageValue);
             formData.append('class_id', classValue);
@@ -476,6 +480,7 @@
 
             submitBtn.disabled = true;
             loading.classList.add('active');
+            loading.querySelector('p').textContent = `${files.length} ta fayl yuklanmoqda...`;
             result.className = 'result';
             result.style.display = 'none';
 
@@ -488,7 +493,15 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    showResult(`Muvaffaqiyatli! ${data.count} ta savol yuborildi.`, 'success');
+                    const total = data.total_questions || data.count || 0;
+                    const done = data.files_processed || 1;
+                    const failed = data.files_failed || 0;
+                    let msg = `Muvaffaqiyatli! ${total} ta savol yuborildi.`;
+                    if (data.files_processed !== undefined) {
+                        msg = `${done} ta fayl qayta ishlandi, ${total} ta savol yuborildi.`;
+                        if (failed > 0) msg += ` ${failed} ta faylda xatolik.`;
+                    }
+                    showResult(msg, 'success');
                     console.log('Natija:', data);
                 } else {
                     showResult(`Xatolik: ${data.error || data.message || 'Noma\'lum xatolik'}`, 'error');
@@ -498,6 +511,7 @@
             } finally {
                 submitBtn.disabled = false;
                 loading.classList.remove('active');
+                loading.querySelector('p').textContent = 'Fayl yuklanmoqda...';
             }
         });
 

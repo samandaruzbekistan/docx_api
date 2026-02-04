@@ -9,7 +9,7 @@ import zipfile
 import re
 import os
 import httpx
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 import uuid
 import shutil
@@ -335,18 +335,16 @@ def build_cell_data(cell, zip_content, image_index):
     }
 
 
-@app.post("/parse-docx/")
-async def parse_docx(
-    file: UploadFile = File(...),
-    test: Optional[str] = Form(None),
-    language: Optional[str] = Form(None),
-    class_id: Optional[str] = Form(None),
-    subject: Optional[str] = Form(None)
-):
-    """DOCX fayldan savollarni o'qib, boshqa API ga yuboradi."""
-    image_files = []  # Vaqtinchalik fayllar (hozircha kerak emas, lekin o'chirish uchun)
+async def _parse_and_send_one_file(
+    content: bytes,
+    test: Optional[str],
+    language: Optional[str],
+    class_id: Optional[str],
+    subject: Optional[str],
+) -> tuple:
+    """Bitta DOCX kontentini parse qilib API ga yuboradi. Qaytaradi: (success, count, error_msg)."""
+    image_files = []
     try:
-        content = await file.read()
         doc = Document(io.BytesIO(content))
         questions = []
         image_index = 0
@@ -449,13 +447,14 @@ async def parse_docx(
                 follow_redirects=True,  # 302 redirect'larni avtomatik kuzatish
                 verify=False  # SSL sertifikat tekshiruvini o'chirish (kerak bo'lsa)
             ) as client:
-                # JSON payload tayyorlash
+                # JSON payload tayyorlash (Laravel questions ni JSON string kutadi)
+                import json
                 payload = {
                     "test_id": int(test) if test else None,
                     "language": language,
                     "grade_id": int(class_id) if class_id else None,
                     "subject_id": int(subject) if subject else None,
-                    "questions": questions
+                    "questions": json.dumps(questions),
                 }
 
                 # Base64 rasmlar hajmini tekshirish
@@ -486,11 +485,7 @@ async def parse_docx(
                 # 302 yoki 3xx status kod bo'lsa
                 if response.status_code in [301, 302, 303, 307, 308]:
                     print(f"⚠️ Redirect detected: {response.headers.get('Location', 'N/A')}")
-                    return JSONResponse({
-                        "success": False,
-                        "error": f"Server redirect qaytarildi (Status: {response.status_code}, Location: {response.headers.get('Location', 'N/A')})",
-                        "count": len(questions)
-                    }, status_code=response.status_code)
+                    return (False, len(questions), f"Server redirect (Status: {response.status_code})")
                 
                 response.raise_for_status()
                 api_response = response.json()
@@ -503,12 +498,7 @@ async def parse_docx(
                     except Exception as e:
                         print(f"⚠️ Faylni o'chirishda xatolik: {e}")
 
-                return JSONResponse({
-                    "success": True,
-                    "count": len(questions),
-                    "message": f"{len(questions)} ta savol muvaffaqiyatli yuborildi",
-                    "api_response": api_response
-                })
+                return (True, len(questions), None)
         except httpx.HTTPStatusError as e:
             # HTTP xatolik (4xx, 5xx)
             # Xatolik bo'lsa ham fayllarni o'chirish
@@ -527,12 +517,7 @@ async def parse_docx(
                 error_detail += f", Response: {e.response.text[:500]}"
             
             print(f"❌ API HTTP xatolik: {error_detail}")
-            return JSONResponse({
-                "success": False,
-                "error": f"API xatolik (Status: {e.response.status_code}): {str(e)}",
-                "error_detail": error_detail,
-                "count": len(questions)
-            }, status_code=e.response.status_code)
+            return (False, len(questions), f"API xatolik (Status: {e.response.status_code}): {str(e)}")
         except httpx.RequestError as e:
             # Network xatolik
             for img_path in image_files:
@@ -543,11 +528,7 @@ async def parse_docx(
                     pass
             
             print(f"❌ API ga ulanishda xatolik: {e}")
-            return JSONResponse({
-                "success": False,
-                "error": f"API ga ulanishda xatolik: {str(e)}",
-                "count": len(questions)
-            }, status_code=500)
+            return (False, 0, f"API ga ulanishda xatolik: {str(e)}")
         except Exception as e:
             # Boshqa xatoliklar
             for img_path in image_files:
@@ -560,20 +541,67 @@ async def parse_docx(
             print(f"❌ API ga yuborishda noma'lum xatolik: {e}")
             import traceback
             traceback.print_exc()
-            return JSONResponse({
-                "success": False,
-                "error": f"Xatolik: {str(e)}",
-                "count": len(questions)
-            }, status_code=500)
+            return (False, len(questions) if 'questions' in dir() else 0, str(e))
 
     except Exception as e:
-        # Xatolik bo'lsa ham fayllarni o'chirish
         for img_path in image_files:
             try:
                 if os.path.exists(img_path):
                     os.remove(img_path)
             except:
                 pass
-        
         print(f"❌ Server xatolik: {e}")
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+        import traceback
+        traceback.print_exc()
+        return (False, 0, str(e))
+
+
+@app.post("/parse-docx/")
+async def parse_docx(
+    files: List[UploadFile] = File(...),
+    test: Optional[str] = Form(None),
+    language: Optional[str] = Form(None),
+    class_id: Optional[str] = Form(None),
+    subject: Optional[str] = Form(None),
+):
+    """Bir yoki bir nechta DOCX faylni ketma-ket parse qilib, har birini API ga yuboradi."""
+    if not files:
+        return JSONResponse(
+            {"success": False, "error": "Kamida bitta fayl tanlang"},
+            status_code=422,
+        )
+    total_questions = 0
+    files_processed = 0
+    files_failed = 0
+    errors = []
+
+    for idx, file in enumerate(files):
+        try:
+            content = await file.read()
+            success, count, error_msg = await _parse_and_send_one_file(
+                content, test, language, class_id, subject
+            )
+            if success:
+                total_questions += count
+                files_processed += 1
+                print(f"✅ Fayl {idx + 1}/{len(files)}: {count} ta savol yuborildi")
+            else:
+                files_failed += 1
+                err = error_msg or "Noma'lum xatolik"
+                errors.append({"file": file.filename, "error": err})
+                print(f"❌ Fayl {idx + 1}/{len(files)} ({file.filename}): {err}")
+        except Exception as e:
+            files_failed += 1
+            errors.append({"file": file.filename, "error": str(e)})
+            print(f"❌ Fayl {idx + 1}/{len(files)} ({file.filename}): {e}")
+
+    return JSONResponse({
+        "success": files_failed == 0,
+        "total_questions": total_questions,
+        "files_processed": files_processed,
+        "files_failed": files_failed,
+        "files_total": len(files),
+        "errors": errors if errors else None,
+        "message": f"{files_processed} ta fayl qayta ishlandi, {total_questions} ta savol yuborildi."
+        + (f" {files_failed} ta faylda xatolik." if files_failed else ""),
+    })
