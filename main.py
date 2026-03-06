@@ -348,13 +348,18 @@ async def _parse_and_send_one_file(
         doc = Document(io.BytesIO(content))
         questions = []
         image_index = 0
+        author_for_file = ""  # Ikkinchi savol qatoridan olinadi
 
         for table in doc.tables:
-            for row in table.rows:
-                if len(row.cells) < 5:
+            for row_idx, row in enumerate(table.rows):
+                if len(row.cells) < 6:  # 6 ustun: savol, tog'ri, noto'g'ri x3, author
                     continue
 
-                # Har bir cell uchun data (har bir rasm uchun unique index)
+                # Author faqat ikkinchi qatordan (row_idx == 1)
+                if row_idx == 1 and not author_for_file:
+                    author_for_file = (row.cells[5].text or "").strip()
+
+                # Har bir cell uchun data (ustunlar 0–4: savol, correct, wrong1–3)
                 question_data = build_cell_data(row.cells[0], content, image_index)
                 if question_data and question_data.get("image"):
                     image_index += 1
@@ -447,14 +452,14 @@ async def _parse_and_send_one_file(
                 follow_redirects=True,  # 302 redirect'larni avtomatik kuzatish
                 verify=False  # SSL sertifikat tekshiruvini o'chirish (kerak bo'lsa)
             ) as client:
-                # JSON payload tayyorlash (Laravel questions ni JSON string kutadi)
-                import json
+                # JSON payload — API questions ni array sifatida qabul qiladi
                 payload = {
                     "test_id": int(test) if test else None,
-                    "language": language,
+                    "language": language or "uz",
                     "grade_id": int(class_id) if class_id else None,
                     "subject_id": int(subject) if subject else None,
-                    "questions": json.dumps(questions),
+                    "author": author_for_file or "",
+                    "questions": questions,
                 }
 
                 # Base64 rasmlar hajmini tekshirish
